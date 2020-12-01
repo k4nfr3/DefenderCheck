@@ -1,4 +1,4 @@
-﻿using Microsoft.Win32;
+using Microsoft.Win32;
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -24,15 +24,16 @@ namespace DefenderCheck
                 Console.WriteLine("[-] Can't access the target file");
                 return;
             }
-            
+            if (debug) { Console.WriteLine("[+] Scanning the whole file first"); }
             string originalFileDetectionStatus = Scan(targetfile).ToString();
             if (originalFileDetectionStatus.Equals("NoThreatFound"))
             {
-                if (debug) { Console.WriteLine("Scanning the whole file first"); }
+                
                 Console.WriteLine("[+] No threat found in submitted file!");
                 return;
+            } else {
+                Console.WriteLine("[+] Threat found in submitted file!");
             }
-            
             if (!Directory.Exists(@"C:\Temp"))
             {
                 Console.WriteLine(@"[-] C:\Temp doesn't exist. Creating it...");
@@ -42,8 +43,10 @@ namespace DefenderCheck
             string testfilepath = @"C:\Temp\testfile.exe";
             byte[] originalfilecontents = File.ReadAllBytes(targetfile);
             int originalfilesize = originalfilecontents.Length;
-            Console.WriteLine("Target file size: {0} bytes", originalfilecontents.Length);
-            Console.WriteLine("Analyzing...\n");
+            double testedfilesize = 0.0;
+            
+            Console.WriteLine("[ ] Target file size: {0} bytes", originalfilecontents.Length);
+            Console.WriteLine("[ ] Analyzing...\n");
 
             byte[] splitarray1 = new byte[originalfilesize/2];
             Buffer.BlockCopy(originalfilecontents, 0, splitarray1, 0, originalfilecontents.Length / 2);
@@ -51,19 +54,29 @@ namespace DefenderCheck
 
             while (true)
             {
-                if (debug) { Console.WriteLine("Testing {0} bytes", splitarray1.Length); }
+                testedfilesize = (Convert.ToDouble(splitarray1.Length) / Convert.ToDouble(originalfilesize)*100);
+
+                if (debug) { Console.WriteLine("[ ] Testing {0} bytes {1:F}%", splitarray1.Length, testedfilesize); }
                 File.WriteAllBytes(testfilepath, splitarray1);
                 string detectionStatus = Scan(testfilepath).ToString();
                 if (detectionStatus.Equals("ThreatFound"))
                 {
-                    if (debug) { Console.WriteLine("Threat found. Halfsplitting again..."); }
+                    if (debug) {
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine("[+] Threat found. Halfsplitting again...");
+                        Console.ForegroundColor = ConsoleColor.White;
+                    }
                     byte[] temparray = HalfSplitter(splitarray1, lastgood);
                     Array.Resize(ref splitarray1, temparray.Length);
                     Array.Copy(temparray, splitarray1, temparray.Length);
                 }
                 else if (detectionStatus.Equals("NoThreatFound"))
                 {
-                    if (debug) { Console.WriteLine("No threat found. Going up 50% of current size."); };
+                    if (debug) {
+                        Console.ForegroundColor = ConsoleColor.Green;
+                        Console.WriteLine("[-] No threat found. Going up 50% of current size.");
+                        Console.ForegroundColor = ConsoleColor.White;
+                     };
                     lastgood = splitarray1.Length;
                     byte[] temparray = Overshot(originalfilecontents, splitarray1.Length); //Create temp array with 1.5x more bytes
                     Array.Resize(ref splitarray1, temparray.Length);
@@ -122,7 +135,7 @@ namespace DefenderCheck
             int newsize = (originalarray.Length - splitarraysize) / 2 + splitarraysize;
             if (newsize.Equals(originalarray.Length-1))
             {
-                Console.WriteLine("Exhausted the search. The binary looks good to go!");
+                Console.WriteLine("\n\n Exhausted the search. The binary looks good to go!");
                 Environment.Exit(0);
             }
             byte[] newarray = new byte[newsize];
@@ -130,8 +143,7 @@ namespace DefenderCheck
             return newarray;            
         }
 
-        //Adapted from https://github.com/yolofy/AvScan/blob/master/src/AvScan.WindowsDefender/WindowsDefenderScanner.cs
-        public static ScanResult Scan(string file, bool getsig = false)
+        public static ScanResult Scan(string file, bool getsig = true)
         {
             if (!File.Exists(file))
             {
@@ -169,7 +181,9 @@ namespace DefenderCheck
                     {
                         string[] sig = stdout.Split(' ');
                         sigName = sig[19]; // Lazy way to get the signature name from MpCmdRun
-                        Console.WriteLine($"File matched signature: \"{sigName}\"\n");
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine($"[+] File matched signature: \"{sigName}\"");
+                        Console.ForegroundColor = ConsoleColor.White;
                         break;
                     }
                 }
